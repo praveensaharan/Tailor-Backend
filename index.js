@@ -23,6 +23,62 @@ mongoose
     console.error(`Error connecting to the database:\n${err}`);
   });
 
+const tokenSchema = new mongoose.Schema({
+  access_token: String,
+  expires_at: Date,
+});
+
+// Define the model
+const Token = mongoose.model("Token", tokenSchema);
+
+// Function to retrieve a valid token
+async function getValidToken() {
+  const token = await Token.findOne();
+
+  if (!token || token.expires_at < new Date()) {
+    const newToken = await fetchNewToken();
+    return newToken;
+  }
+
+  return token.access_token;
+}
+
+// Function to fetch a new token from Auth0
+async function fetchNewToken() {
+  const data = {
+    client_id: `${process.env.CLIENT_ID}`,
+    client_secret: `${process.env.CLIENT_SECRET}`,
+    audience: "https://dev-w6w73v6food6memp.us.auth0.com/api/v2/",
+    grant_type: "client_credentials",
+  };
+
+  try {
+    const response = await axios.post(
+      "https://dev-w6w73v6food6memp.us.auth0.com/oauth/token",
+      data,
+      {
+        headers: {
+          "content-type": "application/json",
+        },
+      }
+    );
+    const expires_in = 86400;
+    const { access_token } = response.data;
+
+    // Calculate expiration time
+    const expires_at = new Date(Date.now() + expires_in * 1000);
+
+    // Save token to the database
+    await Token.deleteMany(); // Remove existing token
+    await Token.create({ access_token, expires_at });
+
+    return access_token;
+  } catch (error) {
+    console.error("Error fetching new token:", error);
+    throw error;
+  }
+}
+
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, unique: true, required: true },
@@ -75,187 +131,15 @@ app.get("/user/:sub", async (req, res) => {
   }
 });
 
-function fetchUserDataFromAPI(sub) {
+async function fetchUserDataFromAPI(sub) {
+  const token = await getValidToken();
   const options = {
     method: "GET",
     url: `https://dev-w6w73v6food6memp.us.auth0.com/api/v2/users/${sub}`,
-    headers: { Authorization: `Bearer ${process.env.TOKEN}` },
+    headers: { Authorization: `Bearer ${token}` },
   };
   return axios(options);
 }
-
-// app.post("/signin", async (req, res) => {
-//   const { email, password } = req.body;
-
-//   try {
-//     // Find the user by email
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//       return res.status(401).json({ message: "Not Registered" });
-//     }
-
-//     if (user.password !== password) {
-//       return res.status(401).json({ message: "Invalid credentials" });
-//     }
-
-//     const { name, _id } = user;
-//     res.status(200).json({ message: "Signin successful", name, email, _id });
-//   } catch (error) {
-//     res.status(500).json({ message: "Error occurred while signing in" });
-//   }
-// });
-
-// const dummyData = [
-//   {
-//     image:
-//       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSNrLXOAYxfl2e7o2oFwHQclX_a1lmD5Nnkog&usqp=CAU",
-//     rating: 4.5,
-//     verified: true,
-//     name: "Stylish Stitches",
-//     address: "123 MG Road, Fort, Mumbai - 400001",
-//     priceRange: "₹400-₹500",
-//     deliveryTime: "1-2 days",
-//     email: "stylishstiches@gmail.com",
-//     phoneNumber: "9876543211",
-//     price: 400,
-//   },
-//   {
-//     image:
-//       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxmVtF9EF7L4-W11_PNrMK85Jdpjy5SP6uXg&usqp=CAU",
-//     rating: 4.2,
-//     verified: true,
-//     name: "Fashionable Fabrics",
-//     address: "567 Linking Road, Bandra, Mumbai - 400050",
-//     priceRange: "₹500-₹600",
-//     deliveryTime: "2-3 days",
-//     email: "Fashionable@gmail.com",
-//     phoneNumber: "9876543211",
-//     price: 500,
-//   },
-//   {
-//     image:
-//       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS5mMW6a1X0qGsdVQgQZm1GdqLTQrE5R-rU3A&usqp=CAU",
-//     rating: 4.7,
-//     verified: false,
-//     name: "Elegant Embroidery",
-//     address: "789 Hill Road, Bandra West, Mumbai - 400050",
-//     priceRange: "₹500-₹600",
-//     deliveryTime: "3-4 days",
-//     email: "stylisembroidery@gmail.com",
-//     phoneNumber: "9876543211",
-//     price: 500,
-//   },
-//   {
-//     image:
-//       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTFG2tNQXUHWpKXoaIy-ts1FrfHxmtSiR7aeg&usqp=CAU",
-//     rating: 3.8,
-//     verified: true,
-//     name: "Silk Sensation",
-//     address: "90 Kalbadevi Road, Mumbai - 400002",
-//     priceRange: "₹350-₹450",
-//     deliveryTime: "2-3 days",
-//     email: "stylissilk@gmail.com",
-//     phoneNumber: "9876543211",
-//     price: 350,
-//   },
-//   {
-//     image:
-//       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSbuGxyDStqfAXKorKwvehvjQhsBn4uvY4p1g&usqp=CAU",
-//     rating: 4.4,
-//     verified: false,
-//     name: "Royal Raiment",
-//     address: "246 Colaba Causeway, Colaba, Mumbai - 400005",
-//     priceRange: "₹400-₹500",
-//     deliveryTime: "1-2 days",
-//     email: "royalstiches@gmail.com",
-//     phoneNumber: "9876543211",
-//     price: 400,
-//   },
-//   {
-//     image:
-//       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS2X68ywVaJWlXWbrxY1orBl9D8VsGy18tjhg&usqp=CAU",
-//     rating: 4.0,
-//     verified: true,
-//     name: "Trendy Textiles",
-//     address: "34 Link Road, Malad West, Mumbai - 400064",
-//     priceRange: "₹300-₹400",
-//     deliveryTime: "3-4 days",
-//     email: "stylistesxtiles@gmail.com",
-//     phoneNumber: "9876543211",
-//     price: 300,
-//   },
-//   {
-//     image:
-//       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR3Z5ft-FZWICMskt-3frVxgFJ5MYQymxQ7Eg&usqp=CAU",
-//     rating: 3.5,
-//     verified: true,
-//     name: "Ethnic Ensemble",
-//     address: "567 Hill Road, Bandra West, Mumbai - 400050",
-//     priceRange: "₹450-₹550",
-//     deliveryTime: "4-5 days",
-//     email: "ensemblestiches@gmail.com",
-//     phoneNumber: "9876543211",
-//     price: 450,
-//   },
-//   {
-//     image:
-//       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQqIMHzce2EWBU6Aq7vlD5JkxhRbuP3JPOFqQ&usqp=CAU",
-//     rating: 4.9,
-//     verified: true,
-//     name: "Designer Drape",
-//     address: "12 Veera Desai Road, Andheri West, Mumbai - 400058",
-//     priceRange: "₹400-₹500",
-//     deliveryTime: "2-3 days",
-//     email: "stylisdrape@gmail.com",
-//     phoneNumber: "9876543211",
-//     price: 400,
-//   },
-//   {
-//     image:
-//       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTXMn22_kKZir50EFoQFXO8AhFrKZOItCgZeA&usqp=CAU",
-//     rating: 3.7,
-//     verified: false,
-//     name: "Yousuf & Sons Tailoring Firm",
-//     address: "88 Hill Road, Bandra West, Mumbai - 400050",
-//     priceRange: "₹350-₹450",
-//     deliveryTime: "1-2 days",
-//     email: "youufsonss@gmail.com",
-//     phoneNumber: "9876543211",
-//     price: 350,
-//   },
-//   {
-//     image:
-//       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSTnwbsGiNXBYzIhT050T_YNIgpJJYGpCGfiA&usqp=CAU",
-//     rating: 4.6,
-//     verified: true,
-//     name: "Tom Tailor",
-//     address: "999 Powai Vihar, Powai, Mumbai - 400076",
-//     priceRange: "₹300-₹400",
-//     deliveryTime: "3-4 days",
-//     email: "tomtailor@gmail.com",
-//     phoneNumber: "9876543211",
-//     price: 300,
-//   },
-// ];
-
-// mongoose
-//   .connect(url, connectionParams)
-//   .then(() => {
-//     console.log("Connected to the database");
-//     // Add the dummyData to the database
-//     dummyData.forEach(async (data) => {
-//       try {
-//         const tailor = new Tailor(data);
-//         await tailor.save();
-//         console.log("Added data to the database:", data.name);
-//       } catch (error) {
-//         console.error("Error adding data to the database:", error);
-//       }
-//     });
-//   })
-//   .catch((err) => {
-//     console.error(`Error connecting to the database:\n${err}`);
-//   });
 
 const tailorSchema = new mongoose.Schema({
   image: { type: String, required: true },
