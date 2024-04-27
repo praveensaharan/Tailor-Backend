@@ -1,0 +1,4 @@
+{
+  "appService.defaultWebAppToDeploy": "undefined/subscriptions/c93f0df6-66eb-4a60-a182-8a937343d6fd/resourceGroups/appsvc_linux_centralus/providers/Microsoft.Web/sites/tailorapp",
+  "appService.deploySubpath": "."
+}
